@@ -705,14 +705,18 @@ async function pollGame() {
     const gameStatus = (data?.status || '').toLowerCase();
     const periods = data?.periods || [];
 
-    // Scores — Knicks is "away" per this game
+    // Scores — delayed 15s to match broadcast
     const home = data?.home; // SAS
     const away = data?.away; // NYK
     if (home && away) {
       const nyk = away.alias === 'NYK' ? away : home;
       const sas = home.alias === 'SAS' ? home : away;
-      document.getElementById('score-nyk').textContent = nyk?.points ?? '—';
-      document.getElementById('score-sas').textContent = sas?.points ?? '—';
+      const nykPts = nyk?.points ?? '—';
+      const sasPts = sas?.points ?? '—';
+      setTimeout(() => {
+        document.getElementById('score-nyk').textContent = nykPts;
+        document.getElementById('score-sas').textContent = sasPts;
+      }, 15000);
     }
 
     if (gameStatus === 'inprogress' || gameStatus === 'halftime') setStatus('live');
@@ -772,14 +776,17 @@ async function pollGame() {
       seenPlayIds.add(play.id);
 
       if (play.event_type === 'endperiod') {
-        renderAlert([], '', true, play._period, false, false);
-        shotCount++;
+        const p = play._period;
+        setTimeout(() => { renderAlert([], '', true, p, false, false); shotCount++; }, 15000);
         lastKnownQuarter = play._period;
         continue;
       }
 
       const triggers = evaluatePlay(play);
-      if (triggers.length > 0) renderAlert(triggers, play.description || '', false, 0, false, false);
+      if (triggers.length > 0) {
+        const desc = play.description || '';
+        setTimeout(() => renderAlert(triggers, desc, false, 0, false, false), 15000);
+      }
     }
     totalPlaysProcessed = allPlays.length;
 
