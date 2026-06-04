@@ -418,29 +418,26 @@ function evaluatePlay(play) {
   }
 
   // ── MITCHELL ROBINSON FREE THROWS
-  // event_type=freethrow, stat type=freethrow, player=Mitchell Robinson
-  if (eventType === 'freethrow' || desc.includes('free throw')) {
-    const robFT = stats.find(s => s.type === 'freethrow' && (s.player?.full_name || '').toLowerCase().includes('mitchell robinson'));
-    if (robFT) {
-      // Parse "1 of 2" from description
+  const isRobinsonFT = (desc.includes('mitchell robinson') || desc.includes('mitch robinson') || (desc.includes('robinson') && desc.includes('free throw'))) && (desc.includes('free throw') || eventType.includes('freethrow'));
+  if (isRobinsonFT) {
+    const isMade = desc.includes('makes') || desc.includes('made');
+
+    if (isMade) {
       const ofMatch = desc.match(/(\d+)\s+of\s+(\d+)/);
       const attemptNum = ofMatch ? parseInt(ofMatch[1]) : 1;
       const totalFTs  = ofMatch ? parseInt(ofMatch[2]) : 1;
-      const made = robFT.made !== false && !desc.includes('misses');
+      const seqKey = `robinson_q${play._period}_${(play.clock||'').replace(/:/g,'')}`;
 
-      if (made) {
-        const seqKey = `robinson_${play.quarter}_${Math.floor(parseFloat(play.clock_decimal || 0) / 60)}`;
-        if (!robinsonFTState[seqKey]) robinsonFTState[seqKey] = { made: 0, total: totalFTs };
-        robinsonFTState[seqKey].made++;
-
-        if (totalFTs >= 2 && attemptNum === totalFTs && robinsonFTState[seqKey].made >= 2) {
+      if (totalFTs === 1) {
+        triggers.push({ icon:'🍼', msg:'Robinson makes a free throw — baby shot!', action:'Baby shot' });
+      } else if (totalFTs >= 2 && attemptNum === 1) {
+        robinsonFTState[seqKey] = { made: 1, total: totalFTs };
+        triggers.push({ icon:'🍼', msg:'Robinson makes a free throw — baby shot!', action:'Baby shot' });
+      } else if (totalFTs >= 2 && attemptNum === totalFTs) {
+        const prevMade = robinsonFTState[seqKey]?.made || 0;
+        if (prevMade >= 1) {
           triggers.push({ icon:'🥃', msg:'Robinson makes BOTH free throws — full shot!', action:'Full shot' });
-        } else if (!(totalFTs >= 2 && attemptNum === 1)) {
-          // Don't fire on 1st of 2 — wait to see if he makes both
-          triggers.push({ icon:'🍼', msg:'Robinson makes a free throw — baby shot!', action:'Baby shot' });
-        }
-        // First of 2: fire baby shot only if he misses the 2nd (handled on 2nd attempt)
-        if (totalFTs >= 2 && attemptNum === 1) {
+        } else {
           triggers.push({ icon:'🍼', msg:'Robinson makes a free throw — baby shot!', action:'Baby shot' });
         }
       }
@@ -448,11 +445,11 @@ function evaluatePlay(play) {
   }
 
   // ── SPURS MISS FREE THROW
-  if (eventType === 'freethrowmiss' || (eventType === 'freethrow' && (desc.includes('misses') || desc.includes('missed')))) {
-    const spursTeam = attrTeam === 'SAS' || attrTeam.includes('SPUR') || attrTeam.includes('SAN ANTONIO');
-    if (spursTeam)
-      triggers.push({ icon:'🤦', msg:'Spurs MISS a free throw — drink!', action:'Drink' });
-  }
+  const isFTEvent = eventType.includes('freethrow') || desc.includes('free throw');
+  const isSpursMiss = (attrTeam === 'SAS' || desc.includes('spurs') || desc.includes('san antonio')) &&
+                      (desc.includes('misses') || desc.includes('missed'));
+  if (isFTEvent && isSpursMiss && !isRobinsonFT)
+    triggers.push({ icon:'🤦', msg:'Spurs MISS a free throw — drink!', action:'Drink' });
 
   // ── KNICKS AND-1
   // description contains "and 1" or qualifiers contain "and1"
