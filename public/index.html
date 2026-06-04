@@ -445,9 +445,10 @@ function evaluatePlay(play) {
   }
 
   // ── SPURS MISS FREE THROW
-  const isFTEvent = eventType.includes('freethrow') || desc.includes('free throw');
-  const isSpursMiss = (attrTeam === 'SAS' || desc.includes('spurs') || desc.includes('san antonio')) &&
-                      (desc.includes('misses') || desc.includes('missed'));
+  const isFTEvent = eventType.includes('freethrow') || eventType.includes('free_throw') || eventType === 'freethrowmiss' || eventType === 'freethrowmade' || desc.includes('free throw');
+  const rawAlias = (play.attribution?.alias || play.attribution?.market || '').toUpperCase();
+  const isSpursAttrib = rawAlias === 'SAS' || rawAlias === 'SAN ANTONIO';
+  const isSpursMiss = isSpursAttrib && (desc.includes('misses') || desc.includes('missed') || eventType.includes('miss'));
   if (isFTEvent && isSpursMiss && !isRobinsonFT)
     triggers.push({ icon:'🤦', msg:'Spurs MISS a free throw — drink!', action:'Drink' });
 
