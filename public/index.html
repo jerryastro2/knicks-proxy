@@ -680,7 +680,7 @@ function playBeep(type) {
       o.connect(g);g.connect(ctx.destination);
       o.frequency.value=f;o.type='sine';
       const t=ctx.currentTime+i*0.12;
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.15,t+0.02);g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
+      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.7,t+0.02);g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
       o.start(t);o.stop(t+0.3);
     });
   } catch(e){}
