@@ -356,6 +356,13 @@ let alertCount = 0, drinkCount = 0, comboCount = 0, shotCount = 0;
 let catchupDone = false;
 let swRegistration = null;
 
+// ── COMBO WINDOW TRACKER ──────────────────────────────────────────────────────
+// Tracks recent triggers so back-to-back rules within 10s escalate to combos
+const COMBO_WINDOW_MS = 10000;
+let comboWindow = []; // array of { trigger, time }
+let comboTimer = null;
+let pendingComboCard = null; // the DOM card currently in the combo window
+
 // ── STATUS ────────────────────────────────────────────────────────────────────
 function setStatus(state) {
   const pill = document.getElementById('status-pill');
@@ -481,11 +488,105 @@ function evaluatePlay(play) {
   return triggers;
 }
 
-// ── QUARTER END DETECTION ─────────────────────────────────────────────────────
-// Detect end of period via event_type="endperiod" or period sequence change
-function checkQuarterEnd(play, currentQ) {
-  return play.event_type === 'endperiod';
+// ── COMBO WINDOW LOGIC ────────────────────────────────────────────────────────
+function addToComboWindow(triggers, playDesc) {
+  // Add new triggers to the window
+  const now = Date.now();
+  triggers.forEach(t => comboWindow.push({ trigger: t, time: now, desc: playDesc }));
+
+  // Clear existing timer
+  if (comboTimer) clearTimeout(comboTimer);
+
+  // Update or create the pending card
+  refreshComboCard();
+
+  // Set timer to flush after window expires
+  comboTimer = setTimeout(() => flushCombo(), COMBO_WINDOW_MS);
 }
+
+function refreshComboCard() {
+  const feed = document.getElementById('alert-feed');
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.remove();
+
+  const allTriggers = comboWindow.map(c => c.trigger);
+  const count = allTriggers.length;
+  const playDesc = comboWindow[comboWindow.length - 1]?.desc || '';
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+  const baseClass = count >= 3 ? 'ac-flipcup' : count === 2 ? 'ac-communal' : '';
+  const rulesHTML = allTriggers.map(t =>
+    `<div class="alert-rule"><span class="alert-icon">${t.icon}</span> ${t.msg}</div>`
+  ).join('');
+
+  let bonusHTML = '';
+  if (count >= 3) bonusHTML = `<div class="bonus-banner b-flip">🏆 3+ RULES — FLIP CUP TIME!!</div>`;
+  else if (count === 2) bonusHTML = `<div class="bonus-banner b-comm">🎲 2 rules back-to-back — ONE COMMUNAL SHOT!</div>`;
+
+  const shortDesc = playDesc ? playDesc.slice(0,90)+(playDesc.length>90?'…':'') : '';
+  const innerHTML = `
+    <div class="alert-top">
+      <div class="alert-rules">${rulesHTML}</div>
+      <span class="alert-time">${timeStr}</span>
+    </div>
+    ${shortDesc ? `<div class="alert-play">${shortDesc}</div>` : ''}
+    ${bonusHTML}`;
+
+  if (pendingComboCard) {
+    // Update existing card in place
+    pendingComboCard.className = 'alert-card' + (baseClass ? ' '+baseClass : '');
+    pendingComboCard.innerHTML = innerHTML;
+    // Flash again for the escalation
+    flashScreen(count >= 3 ? '#ff2d55' : count === 2 ? '#ff9500' : '#f56a00');
+    playBeep(count >= 3 ? 'epic' : 'normal');
+  } else {
+    // Create new card
+    const card = document.createElement('div');
+    card.className = 'alert-card' + (baseClass ? ' '+baseClass : '');
+    card.innerHTML = innerHTML;
+    feed.insertBefore(card, feed.firstChild);
+    pendingComboCard = card;
+    flashScreen('#f56a00');
+    playBeep('normal');
+  }
+}
+
+function flushCombo() {
+  if (!comboWindow.length) return;
+
+  const allTriggers = comboWindow.map(c => c.trigger);
+  const count = allTriggers.length;
+
+  // Update stats now that combo is finalised
+  if (count >= 3) { drinkCount += count; comboCount++; shotCount++; }
+  else if (count === 2) { drinkCount += 2; comboCount++; }
+  else { drinkCount++; }
+
+  alertCount++;
+  document.getElementById('sn-alerts').textContent = alertCount;
+  document.getElementById('sn-drinks').textContent = drinkCount;
+  document.getElementById('sn-combos').textContent = comboCount;
+  document.getElementById('sn-shots').textContent = shotCount;
+
+  // Log it
+  const logAction = count >= 3 ? 'FLIP CUP 🏆' : count === 2 ? 'Communal shot 🎲' : allTriggers[0]?.action || 'Drink';
+  const logClass  = count >= 3 ? 'la-flip' : count === 2 ? 'la-comm' : '';
+  const eventLabel = allTriggers.map(t => t.msg.split('—')[0].trim()).join(' + ');
+  const now = new Date();
+  addLogRow(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}), eventLabel, logAction, logClass);
+
+  // Push notification
+  const pushTitle = count >= 3 ? '🏆 FLIP CUP TIME!!' : count === 2 ? '🎲 Communal Shot!' : `${allTriggers[0].icon} Drink!`;
+  sendPushAlert(pushTitle, allTriggers.map(t => t.msg).join('\n'), 'drink-' + Date.now());
+
+  // Reset
+  comboWindow = [];
+  comboTimer = null;
+  pendingComboCard = null;
+}
+
+
 
 // ── RENDER ALERT ──────────────────────────────────────────────────────────────
 function renderAlert(triggers, playDesc, isQuarter, quarterNum, isTest, isCatchup) {
@@ -714,7 +815,7 @@ async function pollGame() {
       setTimeout(() => {
         document.getElementById('score-nyk').textContent = nykPts;
         document.getElementById('score-sas').textContent = sasPts;
-      }, 15000);
+      }, 25000);
     }
 
     if (gameStatus === 'inprogress' || gameStatus === 'halftime') setStatus('live');
@@ -775,7 +876,7 @@ async function pollGame() {
 
       if (play.event_type === 'endperiod') {
         const p = play._period;
-        setTimeout(() => { renderAlert([], '', true, p, false, false); shotCount++; }, 15000);
+        setTimeout(() => { renderAlert([], '', true, p, false, false); shotCount++; }, 25000);
         lastKnownQuarter = play._period;
         continue;
       }
@@ -783,7 +884,7 @@ async function pollGame() {
       const triggers = evaluatePlay(play);
       if (triggers.length > 0) {
         const desc = play.description || '';
-        setTimeout(() => renderAlert(triggers, desc, false, 0, false, false), 15000);
+        setTimeout(() => addToComboWindow(triggers, desc), 25000);
       }
     }
     totalPlaysProcessed = allPlays.length;
