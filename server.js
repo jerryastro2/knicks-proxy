@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const API_KEY = process.env.SPORTRADAR_API_KEY || 'v5xGfgarWECET89dMDzBm3BdrUuVUjDLkwaJl9xh';
-const GAME_ID = process.env.GAME_ID || 'sr:match:70505018';
+const GAME_ID = process.env.GAME_ID || 'sr:match:70505016';
 
 // Serve the frontend HTML
 app.use(express.static(path.join(__dirname, 'public')));
